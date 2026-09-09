@@ -3,7 +3,7 @@ VoidPrivacy V1.0
 Terminal-only transparent Tor routing for Linux. No GUI. No manual install.
 
 How it works
-On first run VoidPrivacy detects the system package manager (apt, pacman, dnf, zypper or apk) and installs whatever is missing (tor, iptables, curl, obfs4proxy) by itself. All TCP traffic is then redirected through the Tor TransPort. All DNS queries are redirected through the Tor DNSPort. Every connection that does not belong to the Tor process is dropped (kill switch), including IPv6. If a bridges file is present, Tor connects through obfs4 pluggable transports instead of connecting directly to the Tor network, so the ISP only sees ordinary encrypted traffic to a bridge, not a connection to Tor.
+On first run VoidPrivacy detects the system package manager (apt, pacman, dnf, zypper or apk) and installs whatever is missing (tor, iptables, curl, obfs4proxy, macchanger) by itself. The default network interface gets a randomized MAC address before anything connects. All TCP traffic is then redirected through the Tor TransPort. All DNS queries are redirected through the Tor DNSPort. Every connection that does not belong to the Tor process is dropped (kill switch), including IPv6. Before asking anything, VoidPrivacy confirms the exit connection is actually Tor; if it is not, it reverts everything and stops instead of running unprotected. If a bridges file is present, Tor connects through obfs4 pluggable transports instead of connecting directly to the Tor network, so the ISP only sees ordinary encrypted traffic to a bridge, not a connection to Tor.
 
 Run
 sudo python3 voidprivacy.py
