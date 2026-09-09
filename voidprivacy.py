@@ -17,11 +17,11 @@ IPTABLES_BACKUP = f"{STATE_DIR}/iptables.rules.bak"
 IP6TABLES_BACKUP = f"{STATE_DIR}/ip6tables.rules.bak"
 
 BANNER = "\033[1;32;40m\n" \
-"#   #  ###  ##### ####     ####  ####  ##### #   #  ###   #### #   # \n" \
-"#   # #   #   #   #   #    #   # #   #   #   #   # #   # #      # #  \n" \
-"#   # #   #   #   #   #    ####  ####    #   #   # ##### #       #   \n" \
-" # #  #   #   #   #   #    #     #  #    #    # #  #   # #       #   \n" \
-"  #    ###  ##### ####     #     #   # #####   #   #   #  ####   #   \n" \
+"//    //  ///////   ///  ///////    ///////  ///////  ///  //    //  ///////  ///////  ///  ///\n" \
+" //    //  //   //   ///  //    //   //   //  //   //  ///  //    //  //   //  //       ///  ///\n" \
+" //    //  //   //   ///  //    //   ///////  //////   ///  //    //  ///////  //        //////\n" \
+"  //  //   //   //   ///  //    //   //       //   //  ///   //  //   //   //  //          //  \n" \
+"   ////    ///////   ///  ///////    //       //    // ///    ////    //   //  ///////     //  \n" \
 "                V 1.0\n" \
 "\033[0m" \
 "\033[0;37mhttps://github.com/v4idbro\033[0m\n"
@@ -31,9 +31,14 @@ def run(cmd, check=True):
     return subprocess.run(cmd, shell=True, check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
+def die(reason):
+    print(f"[{reason}]", flush=True)
+    sys.exit(1)
+
+
 def require_root():
     if os.geteuid() != 0:
-        sys.exit(1)
+        die("root required")
 
 
 def ensure_state_dir():
@@ -53,6 +58,7 @@ def install_dependencies():
         "iptables": "iptables",
         "curl": "curl",
         "obfs4proxy": "obfs4proxy",
+        "macchanger": "macchanger",
     }
     missing = [pkg for binary, pkg in binaries.items()
                if run(f"command -v {binary}", check=False).returncode != 0]
@@ -89,6 +95,25 @@ def detect_tor_user():
 def detect_obfs4_path():
     out = run("command -v obfs4proxy", check=False).stdout.decode().strip()
     return out if out else None
+
+
+def default_interface():
+    out = run("ip route show default", check=False).stdout.decode().split()
+    if "dev" in out:
+        return out[out.index("dev") + 1]
+    return None
+
+
+def spoof_mac():
+    iface = default_interface()
+    if not iface:
+        return
+    if run("command -v macchanger", check=False).returncode != 0:
+        return
+    run(f"ip link set {iface} down", check=False)
+    run(f"macchanger -r {iface}", check=False)
+    run(f"ip link set {iface} up", check=False)
+    time.sleep(2)
 
 
 def write_torrc():
@@ -212,6 +237,13 @@ def current_ip():
         return None
 
 
+def verify_tor():
+    out = run(
+        'curl -s --max-time 10 https://check.torproject.org/api/ip', check=False
+    ).stdout.decode().replace(" ", "")
+    return '"IsTor":true' in out
+
+
 def rotation_loop(interval):
     last_ip = current_ip()
     if last_ip:
@@ -234,18 +266,22 @@ def cleanup():
 
 def main():
     require_root()
-    print(BANNER)
+    print(BANNER, flush=True)
     install_dependencies()
     tor_user = detect_tor_user()
     if not tor_user:
-        sys.exit(1)
+        die("tor not found")
+    spoof_mac()
     write_torrc()
     backup_firewall()
     apply_firewall(tor_user)
     if not start_tor_service():
         cleanup()
-        sys.exit(1)
-    print("[active]")
+        die("tor failed")
+    if not verify_tor():
+        cleanup()
+        die("leak detected")
+    print("[active]", flush=True)
     try:
         interval = int(input("How much time changes (seconds): "))
     except ValueError:
